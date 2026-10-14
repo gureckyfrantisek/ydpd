@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Natural Hazards of the World: Earthquakes, Tsunamis and Volcanic Eruptions</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<style>
+  :root { --bg:#fff; --fg:#1d2733; --muted:#5a6675; --line:#d5dbe3; --panel:rgba(255,255,255,.96); --accent:#3b6ea5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161c24; --fg:#e8edf3; --muted:#a3afbd; --line:#2e3946; --panel:rgba(22,28,36,.96); --accent:#7fb0e6; } }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; }
+  body { display:flex; flex-direction:column; font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:8px 14px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:1.15rem; }
+  header p { margin:2px 0 0; color:var(--muted); font-size:.85rem; }
+  #wrap { position:relative; flex:1; min-height:0; }
+  #map { position:absolute; inset:0; }
+  #panel { position:absolute; top:10px; left:10px; width:290px; max-width:calc(100% - 64px); max-height:calc(100% - 20px); overflow:auto;
+           background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 12px; z-index:2; }
+  #panel summary { font-weight:600; cursor:pointer; }
+  .row { display:flex; align-items:flex-start; gap:8px; margin:8px 0; }
+  .row svg { flex:none; margin-top:2px; }
+  .row label { cursor:pointer; }
+  .row small { display:block; color:var(--muted); }
+  .ctl { margin-top:10px; padding-top:8px; border-top:1px solid var(--line); }
+  button { font:inherit; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); cursor:pointer; }
+  #status { color:var(--muted); font-size:.8rem; margin-top:6px; }
+  /* ---- time range bar ---- */
+  #timebar { padding:8px 18px 10px; border-top:1px solid var(--line); }
+  #timebar .top { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; font-size:.85rem; }
+  #timebar .top b { font-size:.95rem; }
+  #presets button { padding:3px 8px; font-size:.8rem; margin-left:4px; }
+  #range { position:relative; height:28px; margin-top:6px; }
+  #range .track { position:absolute; left:11px; right:11px; top:12px; height:4px; background:var(--line); border-radius:2px; }
+  #range .fill { position:absolute; top:0; height:4px; background:var(--accent); border-radius:2px; }
+  #range input { position:absolute; left:0; top:0; width:100%; height:28px; margin:0; background:none; pointer-events:none; -webkit-appearance:none; appearance:none; }
+  #range input::-webkit-slider-runnable-track { background:transparent; }
+  #range input::-moz-range-track { background:transparent; }
+  #range input::-webkit-slider-thumb { -webkit-appearance:none; pointer-events:auto; width:22px; height:22px; border-radius:50%; background:#fff; border:3px solid var(--accent); cursor:grab; }
+  #range input::-moz-range-thumb { pointer-events:auto; width:16px; height:16px; border-radius:50%; background:#fff; border:3px solid var(--accent); cursor:grab; }
+  #ends { display:flex; justify-content:space-between; color:var(--muted); font-size:.75rem; }
+  #note { padding:6px 14px; font-size:.78rem; background:rgba(230,159,0,.15); border-top:1px solid var(--line); }
+  footer { padding:6px 14px; font-size:.75rem; color:var(--muted); border-top:1px solid var(--line); }
+  footer a { color:inherit; }
+  .maplibregl-ctrl-group button.home-btn { display:flex; align-items:center; justify-content:center; }
+  /* ---- popups ---- */
+  .maplibregl-popup-content { color:#1d2733; font:13px/1.4 system-ui,sans-serif; padding:10px 12px; }
+  .pop .nav { display:flex; justify-content:center; align-items:center; gap:10px; margin:0 14px 6px 0; font-weight:600; }
+  .pop .nav button { padding:2px 10px; color:#1d2733; background:#fff; border-color:#b8c1cc; }
+  .pop .kind { font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; }
+  .pop h3 { margin:2px 0 6px; font-size:1rem; }
+  .pop .sec { margin-top:6px; padding-top:4px; border-top:1px solid #d5dbe3; font-weight:700; font-size:.75rem; color:#5a6675; text-transform:uppercase; }
+  .pop table { border-collapse:collapse; width:100%; }
+  .pop td { padding:1px 0; vertical-align:top; } .pop td:first-child { color:#5a6675; padding-right:10px; white-space:nowrap; }
+  .pop .none { margin:3px 0 0; font-style:italic; }
+  @media (max-width:700px) { h1 { font-size:1rem; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Natural Hazards of the World: Earthquakes, Tsunamis and Volcanic Eruptions</h1>
+  <p>Click a symbol or cluster for details. Use the time slider below the map to choose a range of years.</p>
+</header>
+
+<div id="wrap">
+  <div id="map"></div>
+  <details id="panel" open>
+    <summary>Legend &amp; controls</summary>
+    <div class="row">
+      <input type="checkbox" id="t-quake" checked aria-label="Show earthquakes">
+      <svg width="24" height="24" viewBox="0 0 22 22"><rect x="3" y="3" width="16" height="16" fill="#8C510A" stroke="#fff" stroke-width="1.5"/></svg>
+      <label for="t-quake"><b>Earthquake</b></label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="t-tsunami" checked aria-label="Show tsunamis">
+      <svg width="24" height="24" viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" fill="#0072B2" stroke="#fff" stroke-width="1.5"/></svg>
+      <label for="t-tsunami"><b>Tsunami</b></label>
+    </div>
+    <div class="row">
+      <input type="checkbox" id="t-volcano" checked aria-label="Show volcanic eruptions">
+      <svg width="24" height="24" viewBox="0 0 22 22"><path d="M11 3 L20 19 H2 Z" fill="#D73027" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <label for="t-volcano"><b>Volcanic eruption</b></label>
+    </div>
+    <div class="row">
+      <span style="width:13px"></span>
+      <span style="display:flex;gap:2px;align-items:center">
+        <svg width="30" height="30" viewBox="0 0 30 30"><rect x="3" y="3" width="24" height="24" fill="#8C510A" stroke="#fff" stroke-width="2"/><text x="15" y="19.5" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="sans-serif">12</text></svg>
+        <svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="#0072B2" stroke="#fff" stroke-width="2"/><text x="15" y="19.5" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="sans-serif">12</text></svg>
+        <svg width="30" height="30" viewBox="0 0 30 30"><path d="M15 3 L28 26 H2 Z" fill="#D73027" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><text x="15" y="23" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="sans-serif">12</text></svg>
+      </span>
+      <div><b>Cluster</b></div>
+    </div>
+    <div class="ctl">
+      <div id="status">Loading data…</div>
+    </div>
+  </details>
+</div>
+
+<div id="timebar">
+  <div class="top">
+    <span>Years shown: <b id="rangeLabel">loading…</b></span>
+    <span id="presets">Quick range:
+      <button data-from="0">All</button><button data-from="1500">1500+</button><button data-from="1800">1800+</button><button data-from="1900">1900+</button><button data-from="1960">1960+</button>
+    </span>
+  </div>
+  <div id="range">
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <input type="range" id="lo" aria-label="Earliest year" disabled>
+    <input type="range" id="hi" aria-label="Latest year" disabled>
+  </div>
+  <div id="ends"><span id="endMin"></span><span id="endMax"></span></div>
+</div>
+
+<div id="note">
+  <b>What this map can and cannot show:</b> Older events appear only if they were seen and written down, so the further back you look, the more events are missing, and early tolls are estimates. Symbols show where each event is catalogued, not the full area affected. "Missing" counts are converted from text to numbers; blank values are treated as not recorded. Events with no year are shown only when the slider covers the full range. Use the map to explore patterns, not to calculate risk.
+</div>
+<footer>
+  Sources: Earthquake, tsunami and volcanic event layers hosted on ArcGIS (see <code>LAYERS</code> in the code); basemap: Esri World Basemap v2 vector tiles. Projection: Web Mercator, which enlarges areas near the poles.<br>
+  Prompt template licensed CC BY 4.0. You may use it for any purpose with attribution to Ian Muehlenhaus, <a href="https://www.promptcartography.com">www.promptcartography.com</a>.
+</footer>
+
+<script>
+/* ================= SETTINGS YOU MAY CHANGE ================= */
+
+// Paste an ArcGIS API key here if your basemap requires one (leave "" if not).
+const ARCGIS_API_KEY = "";
+
+// Your basemap (vector tile service)
+const BASEMAP_URL = "https://basemaps.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer";
+
+// Data layers. "layerId" is the number after FeatureServer/ (usually 0).
+// Each field list gives possible field names in priority order. Spaces, underscores and
+// capital letters are ignored when matching ("EQ_PRIMARY" = "Eq Primary").
+// If a popup is missing a value, open the browser console (F12): the real field names are printed there.
+const LAYERS = {
+  quake: {
+    label: "Earthquake", color: "#8C510A", layerId: 0,
+    url: "https://services2.arcgis.com/LlQJoYHf9cwrM7NJ/arcgis/rest/services/earthquakes_cv1/FeatureServer",
+    fields: { location: ["Location Name","Location","Place","Name"], country: ["Country"], year: ["Year"],
+              strength: ["Eq Primary","Magnitude","Mag","Eq Magnitude","Eq Mag Mw"],
+              deaths: ["Deaths","Total Deaths"], injuries: ["Injuries","Total Injuries"], missing: ["Missing","Total Missing"] }
+  },
+  tsunami: {
+    label: "Tsunami", color: "#0072B2", layerId: 0,
+    url: "https://services2.arcgis.com/LlQJoYHf9cwrM7NJ/arcgis/rest/services/tsunamis_cv1/FeatureServer",
+    fields: { location: ["Location Name","Location","Place","Name"], country: ["Country"], year: ["Year"],
+              strength: ["Maximum Water Height","Max Water Height","Max Event Runup","Wave Height"],
+              eqmag: ["Eq Magnitude","Eq Primary","Magnitude","Eq Mag Unk"],
+              deaths: ["Deaths","Total Deaths"], injuries: ["Injuries","Total Injuries"], missing: ["Missing","Total Missing"] }
+  },
+  volcano: {
+    label: "Volcanic eruption", color: "#D73027", layerId: 0,
+    url: "https://services2.arcgis.com/LlQJoYHf9cwrM7NJ/arcgis/rest/services/volcano_events_cv1/FeatureServer",
+    fields: { location: ["Volcano Name","Name","Location Name","Location"], country: ["Country"], year: ["Year"],
+              strength: ["VEI"],
+              deaths: ["Deaths","Total Deaths"], injuries: ["Injuries","Total Injuries"], missing: ["Missing","Total Missing"] }
+  }
+};
+
+const WORLD_VIEW = { center: [10, 20], zoom: 1.6 };
+const ICON_SIZE = 1.15;      // symbol size (all hazards, all strengths). Raise for bigger symbols.
+const CLUSTER_RADIUS = 45;   // pixels; larger = more grouping
+const CLUSTER_MAX_ZOOM = 6;  // clusters break apart above this zoom level
+
+/* ================= CODE BELOW: usually no need to edit ================= */
+
+const UNKNOWN_YEAR = -99999;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const nk = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function pick(p, names) {
+  const keys = {}; Object.keys(p).forEach(k => keys[nk(k)] = k);
+  for (const n of names || []) { const k = keys[nk(n)]; if (k !== undefined && p[k] !== null && p[k] !== "") return p[k]; }
+  return null;
+}
+// Parse numbers that may be stored as text (e.g. the "missing" field) into integers
+function toInt(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return isFinite(v) ? Math.round(v) : null;
+  const m = String(v).replace(/,/g, "").match(/-?\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+function toNum(v) { const n = parseFloat(String(v ?? "").replace(/,/g, "")); return isNaN(n) ? null : n; }
+function yearOf(v) { let y = toInt(v); if (y !== null && Math.abs(y) > 100000) y = new Date(y).getUTCFullYear(); return y; }
+const fmtYear = y => y === null || y === UNKNOWN_YEAR ? "year unknown" : (y < 0 ? Math.abs(y) + " BCE" : String(y));
+const fmtN = n => n === null ? "not recorded" : n.toLocaleString();
+// "JAPAN: HONSHU" -> "Japan: Honshu"; ALL-CAPS text becomes Title Case
+function tidy(s) {
+  s = String(s).trim();
+  if (s === s.toUpperCase() && /[A-Z]/.test(s)) s = s.toLowerCase().replace(/(^|[\s\-(/:])([a-z\u00e0-\u00ff])/g, (m, a, b) => a + b.toUpperCase());
+  return s;
+}
+
+// Make every layer produce the same property names, whatever its own field names are
+let uidCounter = 0;
+function normalise(kind, f) {
+  const F = LAYERS[kind].fields, p = f.properties || {};
+  let country = pick(p, F.country), loc = pick(p, F.location);
+  country = country ? String(country).trim() : null;
+  loc = loc ? String(loc).trim() : null;
+  if (loc && country && loc.toLowerCase().startsWith(country.toLowerCase() + ":")) loc = loc.slice(country.length + 1).trim();
+  const y = yearOf(pick(p, F.year));
+  const title = `${loc ? tidy(loc) : "Unknown location"}: ${country ? tidy(country) : "Unknown country"} (${fmtYear(y)})`;
+  const d = toInt(pick(p, F.deaths)), i = toInt(pick(p, F.injuries)), m = toInt(pick(p, F.missing));
+  const s = toNum(pick(p, F.strength)), mag = toNum(pick(p, F.eqmag));
+  const strengthTxt = s === null ? "not recorded" : kind === "tsunami" ? s + " m" : String(s);
+  return { type: "Feature", geometry: f.geometry, properties: {
+    uid: ++uidCounter, kind, title, year: y === null ? UNKNOWN_YEAR : y, strengthTxt,
+    eqmag: mag === null ? "not recorded" : String(mag),
+    dN: d > 0 ? d : 0,                                   // numeric deaths, used for cluster totals
+    hasImpact: (d > 0) || (i > 0) || (m > 0),
+    deaths: fmtN(d), injuries: fmtN(i), missing: fmtN(m) } };
+}
+
+// Download every record (the server sends them in pages)
+async function loadLayer(kind) {
+  const cfg = LAYERS[kind]; let off = 0, out = [], logged = false;
+  for (let page = 0; page < 60; page++) {
+    const q = `${cfg.url}/${cfg.layerId}/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson&resultOffset=${off}&resultRecordCount=2000`
+            + (ARCGIS_API_KEY ? `&token=${encodeURIComponent(ARCGIS_API_KEY)}` : "");
+    const r = await fetch(q); if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json(); if (j.error) throw new Error(j.error.message);
+    const raw = j.features || []; if (!raw.length) break;
+    if (!logged) { console.info(`[${kind}] field names:`, Object.keys(raw[0].properties || {})); logged = true; }
+    out.push(...raw.filter(f => f.geometry && f.geometry.type === "Point").map(f => normalise(kind, f)));
+    off += raw.length;
+  }
+  return out;
+}
+
+// Symbols: square = earthquake, point = tsunami, triangle = volcano (colors set in LAYERS)
+function makeIcon(kind) {
+  const S = 64, c = document.createElement("canvas"); c.width = c.height = S; const g = c.getContext("2d");
+  g.lineJoin = "round"; g.lineWidth = 5; g.strokeStyle = "#fff"; g.fillStyle = LAYERS[kind].color;
+  g.beginPath();
+  if (kind === "quake") g.rect(9, 9, 46, 46);
+  else if (kind === "tsunami") g.arc(32, 32, 24, 0, 6.283);
+  else { g.moveTo(32, 5); g.lineTo(59, 56); g.lineTo(5, 56); g.closePath(); }
+  g.stroke(); g.fill();
+  return g.getImageData(0, 0, S, S);
+}
+
+/* ---------- Basemap: your Esri vector tile service ---------- */
+// Esri's style file uses relative web addresses that MapLibre cannot follow, so we make them absolute.
+async function loadEsriStyle() {
+  const base = BASEMAP_URL.replace(/\/$/, "");
+  const styleUrl = base + "/resources/styles/root.json" + (ARCGIS_API_KEY ? "?token=" + encodeURIComponent(ARCGIS_API_KEY) : "");
+  const r = await fetch(styleUrl); if (!r.ok) throw new Error("Style HTTP " + r.status);
+  const s = await r.json(); if (s.error) throw new Error(s.error.message || "Style error");
+  const abs = u => { if (/^https?:/.test(u)) return u; const parts = (base + "/resources/styles").split("/");
+    while (u.startsWith("../")) { parts.pop(); u = u.slice(3); } return parts.join("/") + "/" + u; };
+  if (s.sprite) s.sprite = abs(s.sprite);
+  if (s.glyphs) s.glyphs = abs(s.glyphs);
+  for (const k in s.sources) {
+    const src = s.sources[k]; if (src.type !== "vector") continue;
+    const root = (src.url ? abs(src.url) : base + "/").replace(/\?.*$/, "").replace(/\/?$/, "/");
+    s.sources[k] = { type: "vector", tiles: [root + "tile/{z}/{y}/{x}.pbf"], minzoom: 0, maxzoom: 15, attribution: "Esri World Basemap v2" };
+  }
+  return s;
+}
+const FALLBACK_STYLE = { version: 8, glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf", sources: {},
+  layers: [{ id: "bg", type: "background", paint: { "background-color": "#dce6ef" } }] };
+
+// Home button (resets the view); added under the zoom buttons
+class HomeControl {
+  onAdd(m) {
+    const c = document.createElement("div"); c.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    const b = document.createElement("button"); b.type = "button"; b.className = "home-btn"; b.title = "Reset view"; b.setAttribute("aria-label", "Reset view");
+    b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>';
+    b.addEventListener("click", () => m.flyTo({ ...WORLD_VIEW, duration: 800 }));
+    c.appendChild(b); this._c = c; return c;
+  }
+  onRemove() { this._c.remove(); }
+}
+
+const statusEl = document.getElementById("status");
+let all = [], map, popup, basemapOK = true, fontStack = ["Open Sans Regular"];
+const failed = [], on = { quake: true, tsunami: true, volcano: true };
+const loEl = document.getElementById("lo"), hiEl = document.getElementById("hi");
+let yMin = 0, yMax = 0, ready = false;
+
+(async function init() {
+  let style;
+  try {
+    style = await loadEsriStyle();
+    const tf = (style.layers.find(l => l.layout && Array.isArray(l.layout["text-font"]) && typeof l.layout["text-font"][0] === "string" && l.layout["text-font"][0] !== "literal") || {}).layout;
+    fontStack = tf ? tf["text-font"] : ["Arial Regular"];
+  } catch (err) { console.error("Basemap failed:", err); basemapOK = false; style = FALLBACK_STYLE; }
+
+  map = new maplibregl.Map({
+    container: "map", style, center: WORLD_VIEW.center, zoom: WORLD_VIEW.zoom, minZoom: 1, attributionControl: false,
+    // adds your API key to every request to arcgis.com (only if a key is set)
+    transformRequest: url => (ARCGIS_API_KEY && /arcgis\.com/.test(url) && !/[?&]token=/.test(url))
+      ? { url: url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(ARCGIS_API_KEY) } : { url }
+  });
+  map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Hazard data: ArcGIS feature layers" }));
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+  map.addControl(new HomeControl(), "top-right");
+  popup = new maplibregl.Popup({ maxWidth: "300px", closeOnClick: false });
+  map.on("error", e => console.warn("Map error:", e.error && e.error.message));
+
+  map.on("load", async () => {
+    for (const k in LAYERS) map.addImage(k, makeIcon(k), { pixelRatio: 2 });
+    const kinds = Object.keys(LAYERS);
+    for (const k of kinds) map.addSource("ev-" + k, { type: "geojson", data: { type: "FeatureCollection", features: [] },
+      cluster: true, clusterRadius: CLUSTER_RADIUS, clusterMaxZoom: CLUSTER_MAX_ZOOM,   // each type clusters only with its own type
+      clusterProperties: { deaths: ["+", ["get", "dN"]] } });
+    for (const k of kinds) map.addLayer({ id: "pt-" + k, type: "symbol", source: "ev-" + k, filter: ["!", ["has", "point_count"]],
+      layout: { "icon-image": k, "icon-size": ICON_SIZE, "icon-allow-overlap": true, "icon-ignore-placement": true } });
+    for (const k of kinds) map.addLayer({ id: "cl-" + k, type: "symbol", source: "ev-" + k, filter: ["has", "point_count"],
+      layout: { "icon-image": k, "icon-allow-overlap": true, "icon-ignore-placement": true,
+                "icon-size": ["step", ["get", "point_count"], 1.6, 10, 2.0, 50, 2.5, 200, 3.0, 1000, 3.5] } });   // bigger = more events
+    for (const k of kinds) map.addLayer({ id: "cc-" + k, type: "symbol", source: "ev-" + k, filter: ["has", "point_count"],
+      layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": fontStack, "text-size": 13,
+                "text-allow-overlap": true, "text-ignore-placement": true, "text-offset": [0, k === "volcano" ? 0.3 : 0] },
+      paint: { "text-color": "#fff" } });
+    for (const l of [...CLUSTER_LAYERS, ...POINT_LAYERS]) {
+      map.on("mouseenter", l, () => map.getCanvas().style.cursor = "pointer");
+      map.on("mouseleave", l, () => map.getCanvas().style.cursor = "");
+    }
+    map.on("click", onMapClick);
+
+    await Promise.all(Object.keys(LAYERS).map(async k => {
+      try { all.push(...await loadLayer(k)); } catch (err) { console.error(k, err); failed.push(LAYERS[k].label); }
+    }));
+    setupSlider();
+  });
+})();
+
+/* ---------- Popups: one at a time, with arrows when features are close together ---------- */
+const CLUSTER_LAYERS = Object.keys(LAYERS).map(k => "cl-" + k), POINT_LAYERS = Object.keys(LAYERS).map(k => "pt-" + k);
+let cur = { list: [], i: 0 };
+function row(a, b) { return `<tr><td>${a}</td><td>${esc(b)}</td></tr>`; }
+function pointHtml() {
+  const n = cur.list.length, p = cur.list[cur.i].properties;
+  const nav = n > 1 ? `<div class="nav"><button data-nav="-1" aria-label="Previous feature">&#9664;</button><span>${cur.i + 1}/${n}</span><button data-nav="1" aria-label="Next feature">&#9654;</button></div>` : "";
+  const sLabel = { quake: "Magnitude", tsunami: "Max. wave height", volcano: "VEI" }[p.kind];
+  const strength = row(sLabel, p.strengthTxt) + (p.kind === "tsunami" ? row("Earthquake magnitude", p.eqmag) : "");
+  const impact = p.hasImpact ? `<table>${row("Deaths", p.deaths)}${row("Injuries", p.injuries)}${row("Missing", p.missing)}</table>`
+                             : `<p class="none">No human impact recorded.</p>`;
+  return `<div class="pop">${nav}<div class="kind" style="color:${LAYERS[p.kind].color}">${LAYERS[p.kind].label}</div>
+    <h3>${esc(p.title)}</h3>
+    <div class="sec">Event strength</div><table>${strength}</table>
+    <div class="sec">Human impact</div>${impact}</div>`;
+}
+function showPoint() { popup.setLngLat(cur.list[cur.i].geometry.coordinates).setHTML(pointHtml()).addTo(map); }
+
+function onMapClick(e) {
+  const cl = map.queryRenderedFeatures(e.point, { layers: CLUSTER_LAYERS });
+  if (cl.length) {
+    const f = cl[0], p = f.properties, kind = f.source.slice(3);
+    popup.setLngLat(f.geometry.coordinates).setHTML(
+      `<div class="pop"><div class="kind" style="color:${LAYERS[kind].color}">${LAYERS[kind].label} cluster</div>
+       <p style="margin:2px 12px 6px 0">This cluster represents <b>${(+p.point_count).toLocaleString()}</b> features and a total of <b>${(+p.deaths).toLocaleString()}</b> deaths.</p>
+       <button data-zoom="${p.cluster_id}" data-src="${f.source}">Zoom in</button></div>`).addTo(map);
+    return;
+  }
+  // all symbols within ~18 px of the click, nearest first, duplicates removed
+  const box = [[e.point.x - 18, e.point.y - 18], [e.point.x + 18, e.point.y + 18]];
+  const seen = new Set(), list = [];
+  for (const f of map.queryRenderedFeatures(box, { layers: POINT_LAYERS })) {
+    if (seen.has(f.properties.uid)) continue; seen.add(f.properties.uid); list.push(f);
+  }
+  if (!list.length) { popup.remove(); return; }
+  const d = f => { const q = map.project(f.geometry.coordinates); return (q.x - e.point.x) ** 2 + (q.y - e.point.y) ** 2; };
+  list.sort((a, b) => d(a) - d(b));
+  cur = { list, i: 0 }; showPoint();
+}
+document.addEventListener("click", ev => {
+  const nav = ev.target.closest("[data-nav]");
+  if (nav) { const n = cur.list.length; cur.i = (cur.i + (+nav.dataset.nav) + n) % n; showPoint(); return; }
+  const z = ev.target.closest("[data-zoom]");
+  if (z) map.getSource(z.dataset.src).getClusterExpansionZoom(+z.dataset.zoom).then(zoom => { map.easeTo({ center: popup.getLngLat(), zoom: zoom + 0.5 }); popup.remove(); });
+});
+
+/* ---------- Filtering: layer toggles + two-handle time slider ---------- */
+let timer = null;
+function refresh() {
+  const lo = +loEl.value, hi = +hiEl.value, full = lo === yMin && hi === yMax;
+  const feats = all.filter(f => { const p = f.properties; return on[p.kind] && (p.year === UNKNOWN_YEAR ? full : p.year >= lo && p.year <= hi); });
+  for (const k in LAYERS) map.getSource("ev-" + k).setData({ type: "FeatureCollection", features: feats.filter(f => f.properties.kind === k) });
+  popup.remove();
+  const c = { quake: 0, tsunami: 0, volcano: 0 }; feats.forEach(f => c[f.properties.kind]++);
+  statusEl.textContent = `Showing ${feats.length.toLocaleString()} events (${c.quake.toLocaleString()} earthquakes, ${c.tsunami.toLocaleString()} tsunamis, ${c.volcano.toLocaleString()} eruptions).`
+    + (failed.length ? ` Could not load: ${failed.join(", ")}.` : "")
+    + (basemapOK ? "" : " Your basemap could not be loaded (check the API key); a plain background is shown.");
+}
+function updateSliderUI() {
+  const span = Math.max(yMax - yMin, 1), lo = +loEl.value, hi = +hiEl.value, fill = document.getElementById("fill");
+  fill.style.left = ((lo - yMin) / span * 100) + "%"; fill.style.width = ((hi - lo) / span * 100) + "%";
+  document.getElementById("rangeLabel").textContent = `${fmtYear(lo)} to ${fmtYear(hi)}`;
+  // keep whichever handle is reachable on top when both sit at the same spot
+  loEl.style.zIndex = lo > yMin + span / 2 ? 3 : 1; hiEl.style.zIndex = 2;
+}
+function onSlide(which) {
+  if (+loEl.value > +hiEl.value) { if (which === "lo") loEl.value = hiEl.value; else hiEl.value = loEl.value; }
+  updateSliderUI(); clearTimeout(timer); timer = setTimeout(refresh, 100);
+}
+function setupSlider() {
+  const years = all.map(f => f.properties.year).filter(y => y !== UNKNOWN_YEAR);
+  if (years.length) { yMin = Math.min(...years); yMax = Math.max(...years); }
+  for (const el of [loEl, hiEl]) { el.min = yMin; el.max = yMax; el.step = 1; el.disabled = !years.length; }
+  loEl.value = yMin; hiEl.value = yMax;
+  document.getElementById("endMin").textContent = fmtYear(yMin); document.getElementById("endMax").textContent = fmtYear(yMax);
+  loEl.addEventListener("input", () => onSlide("lo")); hiEl.addEventListener("input", () => onSlide("hi"));
+  document.querySelectorAll("#presets button").forEach(b => b.addEventListener("click", () => {
+    loEl.value = Math.max(+b.dataset.from, yMin); hiEl.value = yMax; updateSliderUI(); refresh(); }));
+  ready = true; updateSliderUI(); refresh();
+}
+for (const k in LAYERS) document.getElementById("t-" + k).addEventListener("change", e => { on[k] = e.target.checked; if (ready) refresh(); });
+if (window.innerWidth < 700) document.getElementById("panel").open = false; // start collapsed on phones
+</script>
+</body>
+</html>
